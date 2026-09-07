@@ -1,17 +1,38 @@
-function unlockAdmin() {
+const LOCAL_ADMIN_USER_HASH =
+    "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
+  LOCAL_ADMIN_PASSWORD_HASH =
+    "d004499ce4a898de17d6dc05dbb73221c417487e76bdae76972560b363f4ae5a";
+async function digest(value) {
+  const data = new TextEncoder().encode(value);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(hash)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+function unlockAdmin(localMode = false) {
   document.body.classList.remove("admin-locked");
   document.querySelector("#admin-login-gate").hidden = true;
   document.querySelector("#admin-user").value = "";
   document.querySelector("#admin-password").value = "";
+  document.body.dataset.adminMode = localMode ? "local" : "central";
 }
 async function checkAdminSession() {
-  const response = await fetch("/.netlify/functions/admin-verifications", {
-    credentials: "same-origin",
-  });
-  if (!response.ok) return false;
-  unlockAdmin();
-  await renderRemoteVerifications(await response.json());
-  return true;
+  if (sessionStorage.getItem("sc-local-admin-auth") === "active") {
+    unlockAdmin(true);
+    renderRemoteVerifications({ records: [] });
+    return true;
+  }
+  try {
+    const response = await fetch("/.netlify/functions/admin-verifications", {
+      credentials: "same-origin",
+    });
+    if (!response.ok) return false;
+    unlockAdmin();
+    await renderRemoteVerifications(await response.json());
+    return true;
+  } catch {
+    return false;
+  }
 }
 checkAdminSession().catch(() => {});
 document
@@ -22,21 +43,40 @@ document
       password = document.querySelector("#admin-password").value,
       error = document.querySelector("#admin-login-error");
     error.textContent = "A verificar…";
-    const response = await fetch("/.netlify/functions/admin-verifications", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ user, password }),
-    });
-    if (response.ok) {
-      error.textContent = "";
-      unlockAdmin();
-      await renderRemoteVerifications(await response.json());
-    } else {
-      error.textContent = "Login ou senha incorretos.";
+    try {
+      const response = await fetch("/.netlify/functions/admin-verifications", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ user, password }),
+      });
+      if (response.ok) {
+        error.textContent = "";
+        unlockAdmin();
+        await renderRemoteVerifications(await response.json());
+        return;
+      }
+    } catch {
+      // Continua para o acesso local quando as Functions não estão disponíveis.
     }
+    const [userHash, passwordHash] = await Promise.all([
+      digest(user),
+      digest(password),
+    ]);
+    if (
+      userHash === LOCAL_ADMIN_USER_HASH &&
+      passwordHash === LOCAL_ADMIN_PASSWORD_HASH
+    ) {
+      sessionStorage.setItem("sc-local-admin-auth", "active");
+      error.textContent = "";
+      unlockAdmin(true);
+      renderRemoteVerifications({ records: [] });
+      return;
+    }
+    error.textContent = "Login ou senha incorretos.";
   });
 document.querySelector("#admin-logout").addEventListener("click", async () => {
+  sessionStorage.removeItem("sc-local-admin-auth");
   await fetch("/.netlify/functions/admin-verifications", {
     method: "DELETE",
     credentials: "same-origin",
