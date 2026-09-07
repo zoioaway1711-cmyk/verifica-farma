@@ -481,18 +481,42 @@ function verify(serial) {
     result.className = "result show warning";
     result.innerHTML = `<strong>! ${t[language].missing}</strong>`;
     addHistory({ serial, name: "—", maker: "", lot: "—", status: "warning" });
+    recordRemoteVerification({ serial, status: "not_found" });
     return;
   }
   if (item.status === "invalid") {
     result.className = "result show invalid";
     result.innerHTML = `<strong>× ${t[language].blocked}</strong>${item.name}<br>${item.maker} · ${t[language].batch} ${item.lot}`;
     addHistory(item);
+    recordRemoteVerification({ ...item, status: "invalid" });
     return;
   }
   const wasNew = creditSerial(item);
   result.className = "result show authentic";
   result.innerHTML = `<strong>✓ ${t[language].valid}</strong>${item.name}<br>${item.maker} · ${t[language].batch} ${item.lot} · ${t[language].expiry} ${item.expiry}<br><small>${wasNew ? t[language].added : t[language].duplicate}</small>`;
   addHistory(item);
+  recordRemoteVerification({ ...item, status: "authentic", credited: wasNew });
+}
+async function recordRemoteVerification(item) {
+  try {
+    await fetch("/.netlify/functions/log-verification", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        serial: item.serial,
+        product: item.name || "",
+        maker: item.maker || "",
+        lot: item.lot || "",
+        status: item.status,
+        credited: Boolean(item.credited),
+        profileId: session || "anonymous",
+        language,
+      }),
+      keepalive: true,
+    });
+  } catch {
+    // A verificação local continua disponível se o serviço remoto estiver offline.
+  }
 }
 function creditSerial(item) {
   const p = loadProfile();
