@@ -1,4 +1,4 @@
-const CACHE='save-concept-v12';
+const CACHE='save-concept-v14';
 const ASSETS=['./','./index.html','./admin.html','./styles.css','./app.js','./admin.js','./catalog-data.js','./manifest.webmanifest','./icon-192.png','./icon-512.png','./save-concept-tirzepatide-3d.png','./login-product-back-v2.png','./save-concept-mark-v2.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
