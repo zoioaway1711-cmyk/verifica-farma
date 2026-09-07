@@ -229,6 +229,63 @@
           </table>
         </div>
       </section>
+      <section
+        class="customer-dashboard"
+        aria-labelledby="verification-log-title"
+      >
+        <div class="customers-head">
+          <div>
+            <span>REGISTO CENTRAL</span>
+            <h2 id="verification-log-title">Ativações e consultas</h2>
+            <p>
+              Data, hora, perfil, serial, resultado e IP registados pelo
+              servidor.
+            </p>
+          </div>
+          <button id="refresh-verifications" type="button">
+            Atualizar registos
+          </button>
+        </div>
+        <div class="customer-summary">
+          <article>
+            <small>Consultas registadas</small
+            ><strong id="verification-total">0</strong>
+          </article>
+          <article>
+            <small>Produtos originais</small
+            ><strong id="verification-valid">0</strong>
+          </article>
+          <article>
+            <small>IPs únicos</small><strong id="verification-ips">0</strong>
+          </article>
+        </div>
+        <label for="verification-search"
+          >Pesquisar por perfil, serial, produto ou IP</label
+        ><input
+          class="admin-search"
+          id="verification-search"
+          type="search"
+          placeholder="Pesquisar registos…"
+        />
+        <div class="customer-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Data e hora</th>
+                <th>Perfil</th>
+                <th>Serial / produto</th>
+                <th>Resultado</th>
+                <th>Endereço IP</th>
+              </tr>
+            </thead>
+            <tbody id="verification-log-body">
+              <tr class="empty-row">
+                <td colspan="5">A carregar registos…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
       <p class="admin-security" id="admin-security">
         As alterações são refletidas imediatamente nas verificações feitas neste
         navegador.
