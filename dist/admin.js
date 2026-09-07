@@ -39,10 +39,24 @@ document
   .querySelector("#admin-login-form")
   .addEventListener("submit", async (e) => {
     e.preventDefault();
-    const user = document.querySelector("#admin-user").value.trim(),
-      password = document.querySelector("#admin-password").value,
+    const user = document.querySelector("#admin-user").value.trim().toLowerCase(),
+      password = document.querySelector("#admin-password").value.trim(),
       error = document.querySelector("#admin-login-error");
     error.textContent = "A verificar…";
+    const [userHash, passwordHash] = await Promise.all([
+      digest(user),
+      digest(password),
+    ]);
+    if (
+      userHash === LOCAL_ADMIN_USER_HASH &&
+      passwordHash === LOCAL_ADMIN_PASSWORD_HASH
+    ) {
+      sessionStorage.setItem("sc-local-admin-auth", "active");
+      error.textContent = "";
+      unlockAdmin(true);
+      renderRemoteVerifications({ records: [] });
+      return;
+    }
     try {
       const response = await fetch("/.netlify/functions/admin-verifications", {
         method: "POST",
@@ -58,20 +72,6 @@ document
       }
     } catch {
       // Continua para o acesso local quando as Functions não estão disponíveis.
-    }
-    const [userHash, passwordHash] = await Promise.all([
-      digest(user),
-      digest(password),
-    ]);
-    if (
-      userHash === LOCAL_ADMIN_USER_HASH &&
-      passwordHash === LOCAL_ADMIN_PASSWORD_HASH
-    ) {
-      sessionStorage.setItem("sc-local-admin-auth", "active");
-      error.textContent = "";
-      unlockAdmin(true);
-      renderRemoteVerifications({ records: [] });
-      return;
     }
     error.textContent = "Login ou senha incorretos.";
   });
