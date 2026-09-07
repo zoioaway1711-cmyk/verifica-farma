@@ -1,21 +1,19 @@
-const ADMIN_USER_HASH =
-    "9ed8e4db769117623e8e1595c2e2f7979c523cf68969a9fa80be7a44205f873b",
-  ADMIN_PASSWORD_HASH =
-    "a7c702a7d2b26372ccdcb813c54231e7015aed81c81adc9eb59b4f580bc088db";
-async function digest(value) {
-  const bytes = new TextEncoder().encode(value),
-    hash = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(hash)]
-    .map((x) => x.toString(16).padStart(2, "0"))
-    .join("");
-}
 function unlockAdmin() {
   document.body.classList.remove("admin-locked");
   document.querySelector("#admin-login-gate").hidden = true;
   document.querySelector("#admin-user").value = "";
   document.querySelector("#admin-password").value = "";
 }
-if (sessionStorage.getItem("sc-admin-auth") === "active") unlockAdmin();
+async function checkAdminSession() {
+  const response = await fetch("/.netlify/functions/admin-verifications", {
+    credentials: "same-origin",
+  });
+  if (!response.ok) return false;
+  unlockAdmin();
+  await renderRemoteVerifications(await response.json());
+  return true;
+}
+checkAdminSession().catch(() => {});
 document
   .querySelector("#admin-login-form")
   .addEventListener("submit", async (e) => {
@@ -24,20 +22,25 @@ document
       password = document.querySelector("#admin-password").value,
       error = document.querySelector("#admin-login-error");
     error.textContent = "A verificar…";
-    const [userHash, passwordHash] = await Promise.all([
-      digest(user),
-      digest(password),
-    ]);
-    if (userHash === ADMIN_USER_HASH && passwordHash === ADMIN_PASSWORD_HASH) {
-      sessionStorage.setItem("sc-admin-auth", "active");
+    const response = await fetch("/.netlify/functions/admin-verifications", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ user, password }),
+    });
+    if (response.ok) {
       error.textContent = "";
       unlockAdmin();
+      await renderRemoteVerifications(await response.json());
     } else {
       error.textContent = "Login ou senha incorretos.";
     }
   });
-document.querySelector("#admin-logout").addEventListener("click", () => {
-  sessionStorage.removeItem("sc-admin-auth");
+document.querySelector("#admin-logout").addEventListener("click", async () => {
+  await fetch("/.netlify/functions/admin-verifications", {
+    method: "DELETE",
+    credentials: "same-origin",
+  }).catch(() => {});
   location.reload();
 });
 const seeds = window.VF_SEEDED_PRODUCTS || [];
@@ -60,6 +63,8 @@ let records = loadRecords(),
   lang = localStorage.getItem("vf-admin-language") || "pt",
   filter = "",
   customerFilter = "";
+let remoteVerifications = [],
+  verificationFilter = "";
 const words = {
   pt: {
     back: "Portal público",
@@ -356,6 +361,58 @@ document
 window.addEventListener("storage", (event) => {
   if (event.key === "vf-customer-registry") renderCustomers();
 });
+function renderRemoteVerifications(payload) {
+  if (payload && Array.isArray(payload.records))
+    remoteVerifications = payload.records;
+  const q = verificationFilter.trim().toLowerCase();
+  const rows = remoteVerifications.filter(
+    (entry) =>
+      !q ||
+      [
+        entry.profileId,
+        entry.serial,
+        entry.product,
+        entry.ip,
+        entry.status,
+      ].some((value) =>
+        String(value || "")
+          .toLowerCase()
+          .includes(q),
+      ),
+  );
+  document.querySelector("#verification-total").textContent =
+    remoteVerifications.length;
+  document.querySelector("#verification-valid").textContent =
+    remoteVerifications.filter((entry) => entry.status === "authentic").length;
+  document.querySelector("#verification-ips").textContent = new Set(
+    remoteVerifications.map((entry) => entry.ip).filter(Boolean),
+  ).size;
+  document.querySelector("#verification-log-body").innerHTML = rows.length
+    ? rows
+        .map(
+          (entry) =>
+            `<tr><td><time datetime="${escapeHtml(entry.activatedAt)}">${new Date(entry.activatedAt).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></td><td><strong>${escapeHtml(entry.profileId || "anonymous")}</strong></td><td><strong>${escapeHtml(entry.serial)}</strong><small class="customer-date">${escapeHtml(entry.product || "—")}</small></td><td><span class="status-pill ${entry.status === "authentic" ? "authentic" : entry.status === "invalid" ? "invalid" : "warning"}">${escapeHtml(entry.status)}</span></td><td><code>${escapeHtml(entry.ip || "—")}</code></td></tr>`,
+        )
+        .join("")
+    : '<tr class="empty-row"><td colspan="5">Nenhum registo encontrado.</td></tr>';
+}
+async function loadRemoteVerifications() {
+  const response = await fetch("/.netlify/functions/admin-verifications", {
+    credentials: "same-origin",
+  });
+  if (response.status === 401) return location.reload();
+  if (!response.ok) throw new Error("remote verification unavailable");
+  renderRemoteVerifications(await response.json());
+}
+document
+  .querySelector("#verification-search")
+  .addEventListener("input", (event) => {
+    verificationFilter = event.target.value;
+    renderRemoteVerifications();
+  });
+document
+  .querySelector("#refresh-verifications")
+  .addEventListener("click", () => loadRemoteVerifications().catch(() => {}));
 document.querySelector("#serial-generator").addEventListener("submit", (e) => {
   e.preventDefault();
   const length = Number(document.querySelector("#serial-length").value);
