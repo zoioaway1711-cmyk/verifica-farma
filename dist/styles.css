@@ -3132,6 +3132,15 @@ footer {
 }
 
 /* Dashboard administrativo de clientes e benefícios. */
+.verification-privacy {
+  margin: -8px 0 18px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f6f8fb;
+  color: #60748c;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .customer-dashboard {
   margin-top: 24px;
   padding: 26px;
