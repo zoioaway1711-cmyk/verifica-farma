@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#071f4c" />
+    <title>Save Concept — Painel administrativo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="admin-page admin-locked">
+    <section
+      class="admin-login-gate"
+      id="admin-login-gate"
+      aria-labelledby="admin-login-title"
+    >
+      <form class="admin-login-card" id="admin-login-form">
+        <img src="./save-concept-mark-v2.png" alt="Save Concept" /><span
+          >ÁREA RESTRITA</span
+        >
+        <h1 id="admin-login-title">Acesso administrativo</h1>
+        <p>Introduza as credenciais de administrador para continuar.</p>
+        <label for="admin-user">Login</label
+        ><input
+          id="admin-user"
+          name="username"
+          autocomplete="username"
+          required
+        /><label for="admin-password">Senha</label
+        ><input
+          id="admin-password"
+          name="password"
+          type="password"
+          autocomplete="current-password"
+          required
+        /><button class="primary" type="submit">
+          <span>Entrar no painel</span><b>→</b>
+        </button>
+        <div
+          class="admin-login-error"
+          id="admin-login-error"
+          aria-live="polite"
+        ></div>
+        <a href="./index.html">← Voltar ao portal</a>
+      </form>
+    </section>
+    <header class="topbar">
+      <a
+        class="brand save-brand brand-icon-only"
+        href="./index.html"
+        aria-label="Save Concept, portal público"
+        ><img src="./save-concept-mark-v2.png" alt=""
+      /></a>
+      <a class="back-public" href="./index.html"
+        >← <span id="back-label">Portal público</span></a
+      >
+      <div class="admin-language" aria-label="Idioma do painel">
+        <button type="button" data-admin-lang="pt">🇵🇹 PT</button
+        ><button type="button" data-admin-lang="en">🇬🇧 EN</button>
+      </div>
+      <button class="admin-logout" id="admin-logout" type="button">Sair</button>
+    </header>
+    <main class="admin admin-standalone" id="admin">
+      <div class="admin-head">
+        <div>
+          <span id="admin-eyebrow">GESTÃO DE AUTENTICIDADE</span>
+          <h1 id="admin-title">Painel administrativo</h1>
+          <p id="admin-intro">
+            100 produtos com dosagens verificadas já estão validados.
+          </p>
+        </div>
+        <span class="demo-badge" id="admin-badge">Base local</span>
+      </div>
+      <div class="admin-grid">
+        <form class="generator-card" id="serial-generator">
+          <div class="admin-card-title">
+            <span>＋</span>
+            <div>
+              <small id="new-label">NOVO PRODUTO</small>
+              <h2 id="generate-title">Gerar produto e serial</h2>
+            </div>
+          </div>
+          <label for="product-name" id="product-label">Produto</label
+          ><input
+            id="product-name"
+            list="product-suggestions"
+            required
+            placeholder="Ex.: Tirzepatida"
+          /><datalist id="product-suggestions"></datalist>
+          <div class="form-row">
+            <div>
+              <label for="product-dose" id="dose-label">Dosagem</label
+              ><input id="product-dose" required placeholder="Ex.: 20mg" />
+            </div>
+            <div>
+              <label for="product-maker" id="maker-label"
+                >Farmácia / marca</label
+              ><input
+                id="product-maker"
+                required
+                placeholder="Ex.: Health Peptides"
+              />
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label for="product-lot" id="lot-label">Lote</label
+              ><input
+                id="product-lot"
+                required
+                placeholder="Ex.: SC-TZP-26120"
+              />
+            </div>
+            <div>
+              <label for="serial-length" id="length-label"
+                >Tamanho do serial</label
+              ><select id="serial-length">
+                <option value="5">5 dígitos</option>
+                <option value="6">6 dígitos</option>
+                <option value="8">8 dígitos</option>
+              </select>
+            </div>
+          </div>
+          <button class="primary" type="submit">
+            <span id="generate-button">Gerar e validar produto</span><b>＋</b>
+          </button>
+          <div
+            id="generated-output"
+            class="generated-output"
+            aria-live="polite"
+          ></div>
+        </form>
+        <div class="admin-register">
+          <div class="admin-summary">
+            <article>
+              <small id="total-label">Total</small
+              ><strong id="admin-total">0</strong>
+            </article>
+            <article>
+              <small id="valid-label">Validados</small
+              ><strong id="admin-active">0</strong>
+            </article>
+            <article>
+              <small id="invalid-label">Invalidados</small
+              ><strong id="admin-blocked">0</strong>
+            </article>
+          </div>
+          <label for="admin-search" id="search-label"
+            >Pesquisar por serial, produto ou farmácia</label
+          ><input
+            class="admin-search"
+            id="admin-search"
+            type="search"
+            placeholder="Pesquisar…"
+          />
+          <div class="admin-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Serial</th>
+                  <th id="product-table-label">Produto / farmácia</th>
+                  <th>Status</th>
+                  <th id="actions-label">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="admin-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <section class="customer-dashboard" aria-labelledby="customers-title">
+        <div class="customers-head">
+          <div>
+            <span id="customers-eyebrow">CLIENTES E BENEFÍCIOS</span>
+            <h2 id="customers-title">Dashboard de clientes</h2>
+            <p id="customers-intro">
+              Perfis ativos neste portal, respetivos seriais, níveis e
+              benefícios.
+            </p>
+          </div>
+          <button id="refresh-customers" type="button">Atualizar dados</button>
+        </div>
+        <div class="customer-summary">
+          <article>
+            <small id="customers-total-label">Perfis ativos</small
+            ><strong id="customers-total">0</strong>
+          </article>
+          <article>
+            <small id="customers-coupons-label">Benefícios ativados</small
+            ><strong id="customers-coupons">0</strong>
+          </article>
+          <article>
+            <small id="customers-near-label">Perto do próximo prémio</small
+            ><strong id="customers-near">0</strong>
+          </article>
+        </div>
+        <label for="customer-search" id="customer-search-label"
+          >Pesquisar por ID, serial, nível ou benefício</label
+        ><input
+          class="admin-search"
+          id="customer-search"
+          type="search"
+          placeholder="Pesquisar clientes…"
+        />
+        <div class="customer-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="customer-id-heading">ID / última atividade</th>
+                <th id="customer-serials-heading">Seriais ativos</th>
+                <th id="customer-level-heading">Pontos e nível</th>
+                <th id="customer-benefits-heading">Benefícios ativos</th>
+                <th id="customer-next-heading">Próximo prémio</th>
+              </tr>
+            </thead>
+            <tbody id="customers-body">
+              <tr class="empty-row">
+                <td colspan="5">Nenhum perfil ativo neste navegador.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <p class="admin-security" id="admin-security">
+        As alterações são refletidas imediatamente nas verificações feitas neste
+        navegador.
+      </p>
+    </main>
+    <dialog id="qr-dialog" class="qr-dialog">
+      <div class="scanner-head">
+        <div>
+          <small>SELO DE AUTENTICAÇÃO</small>
+          <h2>QR Code do serial</h2>
+        </div>
+        <button id="close-qr" type="button" aria-label="Fechar">×</button>
+      </div>
+      <div class="qr-sheet">
+        <div class="qr-brand">
+          <span class="mini-mark">SC</span
+          ><strong>save<br /><small>concept®</small></strong>
+        </div>
+        <div id="qr-canvas"></div>
+        <span>SERIAL SAVE CONCEPT</span><strong id="qr-serial">00000</strong
+        ><small id="qr-product"></small>
+      </div>
+      <button id="download-qr" class="primary" type="button">
+        <span>Descarregar QR Code</span><b>↓</b>
+      </button>
+    </dialog>
+    <script src="./catalog-data.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="./admin.js"></script>
+  </body>
+</html>
