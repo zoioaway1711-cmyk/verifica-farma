@@ -305,6 +305,40 @@ function loadCustomers() {
     ? profiles.filter((item) => item && item.id)
     : [];
 }
+const CUSTOMER_RANKS = [
+  { level: 1, name: "Essencial", points: 0 },
+  { level: 2, name: "Prata", points: 1000 },
+  { level: 3, name: "Ouro", points: 2000 },
+  { level: 4, name: "Platina", points: 3000 },
+  { level: 5, name: "Diamante", points: 5000 },
+];
+function saveCustomers(profiles) {
+  localStorage.setItem("vf-customer-registry", JSON.stringify(profiles));
+}
+function updateCustomer(profileId, updater) {
+  const profiles = loadCustomers();
+  const index = profiles.findIndex((profile) => profile.id === profileId);
+  if (index < 0) return null;
+  const updated = updater({ ...profiles[index] }) || profiles[index];
+  updated.adminUpdatedAt = new Date().toISOString();
+  profiles[index] = updated;
+  saveCustomers(profiles);
+  return updated;
+}
+function saveCustomerRewardProfile(profile) {
+  const key = `vf-rewards-profile-v3-${profile.id}`;
+  const saved = safeParse(localStorage.getItem(key), {
+    verified: [],
+    claimed: {},
+    verifiedAt: {},
+  });
+  saved.verified = [...new Set(profile.serials || [])].filter(
+    (serial) => !(profile.revokedSerials || []).includes(serial),
+  );
+  saved.verifiedAt = { ...(saved.verifiedAt || {}), ...(profile.verifiedAt || {}) };
+  saved.claimed = saved.claimed || {};
+  localStorage.setItem(key, JSON.stringify(saved));
+}
 function nextReward(serialCount) {
   if (serialCount < 3)
     return {
@@ -347,6 +381,7 @@ function mergeCustomerProfiles() {
     if (
       event.status === "authentic" &&
       event.serial &&
+      !(profile.revokedSerials || []).includes(event.serial) &&
       !profile.serials.includes(event.serial)
     )
       profile.serials.push(event.serial);
@@ -368,7 +403,9 @@ function productsForProfile(profile) {
       name: event?.product || catalog?.name || "Produto não identificado",
       maker: event?.maker || catalog?.maker || "—",
       lot: event?.lot || catalog?.lot || "—",
-      status: event?.status || catalog?.status || "authentic",
+      status: (profile.revokedSerials || []).includes(serial)
+        ? "invalid"
+        : event?.status || catalog?.status || "authentic",
       verifiedAt:
         event?.activatedAt ||
         profile.verifiedAt?.[serial] ||
@@ -430,7 +467,7 @@ function renderCustomers() {
           const products = productsForProfile(profile);
           const names = [...new Set(products.map((item) => item.name))];
           const lastEvent = (profile.events || [])[0];
-          return `<article class="customer-profile-card"><div class="customer-profile-top"><span class="customer-avatar">${escapeHtml(profile.id.slice(-2).toUpperCase())}</span><div><small>ID DO CLIENTE</small><strong>${escapeHtml(profile.id)}</strong><time datetime="${escapeHtml(profile.lastActive || "")}">${new Date(profile.lastActive || Date.now()).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></div><span class="status-pill authentic">Ativo</span></div><div class="customer-profile-metrics"><span><small>Seriais</small><strong>${products.length}</strong></span><span><small>Medicamentos</small><strong>${names.length}</strong></span><span><small>Pontos</small><strong>${Number(profile.points || products.length * 100).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</strong></span></div><div class="customer-medicine-tags">${names.slice(0, 3).map((name) => `<span>${escapeHtml(name)}</span>`).join("")}${names.length > 3 ? `<b>+${names.length - 3}</b>` : ""}</div><div class="customer-card-foot"><small>${escapeHtml(lastEvent?.ip || "Sem IP registado")} · ${escapeHtml(lastEvent?.metadata?.platform || "dispositivo não identificado")}</small><button type="button" data-customer-details="${escapeHtml(profile.id)}">Ver perfil completo</button></div></article>`;
+          return `<article class="customer-profile-card ${profile.blocked ? "customer-blocked" : ""}"><div class="customer-profile-top"><span class="customer-avatar">${escapeHtml(profile.id.slice(-2).toUpperCase())}</span><div><small>ID DO CLIENTE</small><strong>${escapeHtml(profile.id)}</strong><time datetime="${escapeHtml(profile.lastActive || "")}">${new Date(profile.lastActive || Date.now()).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></div><span class="status-pill ${profile.blocked ? "invalid" : "authentic"}">${profile.blocked ? "Bloqueado" : "Ativo"}</span></div><div class="customer-profile-metrics"><span><small>Seriais</small><strong>${products.filter((item) => item.status === "authentic").length}</strong></span><span><small>Medicamentos</small><strong>${names.length}</strong></span><span><small>Rank</small><strong>${escapeHtml(profile.levelName || "Essencial")}</strong></span></div><div class="customer-medicine-tags">${names.slice(0, 3).map((name) => `<span>${escapeHtml(name)}</span>`).join("")}${names.length > 3 ? `<b>+${names.length - 3}</b>` : ""}</div><div class="customer-card-foot"><small>${escapeHtml(lastEvent?.ip || "Sem IP registado")} · ${escapeHtml(lastEvent?.metadata?.platform || "dispositivo não identificado")}</small><button type="button" data-customer-details="${escapeHtml(profile.id)}">Gerir perfil e permissões</button></div></article>`;
         })
         .join("")
     : `<div class="customer-cards-empty">${words[lang].noCustomers}</div>`;
@@ -478,7 +515,30 @@ function openCustomerDetail(profileId) {
   ];
   document.querySelector("#customer-detail-title").textContent =
     `Cliente ${profile.id}`;
+  const rankLevel = Number(profile.rankOverride || profile.level || 1);
+  const availableProducts = records
+    .filter(
+      (record) =>
+        record.status === "authentic" &&
+        !(profile.serials || []).includes(record.serial),
+    )
+    .slice(0, 200);
   document.querySelector("#customer-detail-content").innerHTML = `
+    <section class="customer-permissions-panel">
+      <div class="permissions-heading"><div><small>CONTROLO ADMINISTRATIVO</small><h3>Rank, cadastro e seriais</h3></div><span class="status-pill ${profile.blocked ? "invalid" : "authentic"}">${profile.blocked ? "Cadastro bloqueado" : "Cadastro ativo"}</span></div>
+      <div class="permission-actions">
+        <form id="customer-rank-form" data-profile-id="${escapeHtml(profile.id)}">
+          <label for="customer-rank-select">Rank do cliente</label>
+          <div><select id="customer-rank-select">${CUSTOMER_RANKS.map((rank) => `<option value="${rank.level}" ${rank.level === rankLevel ? "selected" : ""}>${rank.name} · ${rank.points.toLocaleString("pt-PT")} pts</option>`).join("")}</select><button type="submit">Aplicar rank</button></div>
+        </form>
+        <form id="customer-serial-form" data-profile-id="${escapeHtml(profile.id)}">
+          <label for="customer-serial-select">Liberar produto para este cadastro</label>
+          <div><select id="customer-serial-select" ${availableProducts.length ? "" : "disabled"}>${availableProducts.length ? availableProducts.map((record) => `<option value="${escapeHtml(record.serial)}">${escapeHtml(record.serial)} · ${escapeHtml(record.name)} · ${escapeHtml(record.maker)}</option>`).join("") : '<option>Nenhum serial disponível</option>'}</select><button type="submit" ${availableProducts.length ? "" : "disabled"}>Atribuir serial</button></div>
+        </form>
+        <button class="account-state-button ${profile.blocked ? "activate" : "block"}" type="button" data-account-action="${profile.blocked ? "unblock" : "block"}" data-profile-id="${escapeHtml(profile.id)}">${profile.blocked ? "Reativar cadastro" : "Bloquear cadastro"}</button>
+      </div>
+      <div class="admin-action-feedback" id="admin-action-feedback" aria-live="polite"></div>
+    </section>
     <div class="customer-detail-summary">
       <article><small>Última atividade</small><strong>${new Date(profile.lastActive || Date.now()).toLocaleString("pt-PT")}</strong></article>
       <article><small>Seriais originais</small><strong>${products.length}</strong></article>
@@ -486,7 +546,7 @@ function openCustomerDetail(profileId) {
       <article><small>Benefícios ativos</small><strong>${(profile.benefits || []).length}</strong></article>
     </div>
     <section class="customer-detail-section"><div><small>MEDICAMENTOS E SERIAIS</small><h3>Produtos associados ao perfil</h3></div>
-      <div class="customer-product-list">${products.length ? products.map((product) => `<article><span class="medicine-icon">Rx</span><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.maker)} · Lote ${escapeHtml(product.lot)}</small><time datetime="${escapeHtml(product.verifiedAt)}">${product.verifiedAt ? new Date(product.verifiedAt).toLocaleString("pt-PT") : "Data indisponível"}</time></div><code>${escapeHtml(product.serial)}</code><span class="status-pill ${product.status === "authentic" ? "authentic" : "invalid"}">${product.status === "authentic" ? "Original" : "Invalidado"}</span></article>`).join("") : "<p>Nenhum produto associado.</p>"}</div>
+      <div class="customer-product-list">${products.length ? products.map((product) => `<article><span class="medicine-icon">Rx</span><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.maker)} · Lote ${escapeHtml(product.lot)}</small><time datetime="${escapeHtml(product.verifiedAt)}">${product.verifiedAt ? new Date(product.verifiedAt).toLocaleString("pt-PT") : "Data indisponível"}</time></div><code>${escapeHtml(product.serial)}</code><span class="status-pill ${product.status === "authentic" ? "authentic" : "invalid"}">${product.status === "authentic" ? "Original" : "Invalidado"}</span><button class="serial-permission-button" type="button" data-serial-action="${product.status === "authentic" ? "revoke" : "restore"}" data-profile-id="${escapeHtml(profile.id)}" data-customer-serial="${escapeHtml(product.serial)}">${product.status === "authentic" ? "Invalidar neste cadastro" : "Restaurar serial"}</button></article>`).join("") : "<p>Nenhum produto associado.</p>"}</div>
     </section>
     <section class="customer-detail-section"><div><small>METADADOS DE AUDITORIA</small><h3>Acessos e dispositivo</h3></div>
       <dl class="customer-metadata-grid">
@@ -514,6 +574,104 @@ document
   .addEventListener("click", () =>
     document.querySelector("#customer-detail-dialog").close(),
   );
+function logAdminCustomerAction(profileId, action, details = {}) {
+  const audit = safeParse(localStorage.getItem("vf-admin-customer-audit"), []);
+  const rows = Array.isArray(audit) ? audit : [];
+  rows.unshift({ profileId, action, details, timestamp: new Date().toISOString() });
+  localStorage.setItem("vf-admin-customer-audit", JSON.stringify(rows.slice(0, 500)));
+}
+function reopenCustomerDetail(profileId) {
+  const detail = document.querySelector("#customer-detail-dialog");
+  if (detail.open) detail.close();
+  renderCustomers();
+  openCustomerDetail(profileId);
+}
+const customerDetailContent = document.querySelector("#customer-detail-content");
+customerDetailContent.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const form = event.target;
+  const profileId = form.dataset.profileId;
+  if (!profileId) return;
+  if (form.id === "customer-rank-form") {
+    const level = Number(form.querySelector("#customer-rank-select").value);
+    const rank = CUSTOMER_RANKS.find((item) => item.level === level);
+    if (!rank) return;
+    const updated = updateCustomer(profileId, (profile) => ({
+      ...profile,
+      rankOverride: rank.level,
+      level: rank.level,
+      levelName: rank.name,
+      points: Math.max(Number(profile.points || 0), rank.points),
+    }));
+    if (updated) {
+      saveCustomerRewardProfile(updated);
+      logAdminCustomerAction(profileId, "rank_changed", { rank: rank.name });
+      reopenCustomerDetail(profileId);
+    }
+  }
+  if (form.id === "customer-serial-form") {
+    const serial = form.querySelector("#customer-serial-select").value;
+    const product = records.find((record) => record.serial === serial);
+    if (!product) return;
+    const updated = updateCustomer(profileId, (profile) => {
+      const serials = [...new Set([...(profile.serials || []), serial])];
+      const revokedSerials = (profile.revokedSerials || []).filter(
+        (item) => item !== serial,
+      );
+      return {
+        ...profile,
+        serials,
+        revokedSerials,
+        verifiedAt: {
+          ...(profile.verifiedAt || {}),
+          [serial]: new Date().toISOString(),
+        },
+        points: Math.max(Number(profile.points || 0), serials.length * 100),
+      };
+    });
+    if (updated) {
+      saveCustomerRewardProfile(updated);
+      logAdminCustomerAction(profileId, "serial_assigned", {
+        serial,
+        product: product.name,
+      });
+      reopenCustomerDetail(profileId);
+    }
+  }
+});
+customerDetailContent.addEventListener("click", (event) => {
+  const accountButton = event.target.closest("[data-account-action]");
+  if (accountButton) {
+    const profileId = accountButton.dataset.profileId;
+    const blocked = accountButton.dataset.accountAction === "block";
+    const updated = updateCustomer(profileId, (profile) => ({
+      ...profile,
+      blocked,
+      blockedAt: blocked ? new Date().toISOString() : null,
+    }));
+    if (updated) {
+      logAdminCustomerAction(profileId, blocked ? "account_blocked" : "account_unblocked");
+      reopenCustomerDetail(profileId);
+    }
+    return;
+  }
+  const serialButton = event.target.closest("[data-serial-action]");
+  if (!serialButton) return;
+  const profileId = serialButton.dataset.profileId;
+  const serial = serialButton.dataset.customerSerial;
+  const revoke = serialButton.dataset.serialAction === "revoke";
+  const updated = updateCustomer(profileId, (profile) => {
+    const revoked = new Set(profile.revokedSerials || []);
+    if (revoke) revoked.add(serial);
+    else revoked.delete(serial);
+    return { ...profile, revokedSerials: [...revoked] };
+  });
+  if (updated) {
+    saveCustomerRewardProfile(updated);
+    logAdminCustomerAction(profileId, revoke ? "serial_revoked" : "serial_restored", { serial });
+    reopenCustomerDetail(profileId);
+  }
+});
 document.querySelector("#product-suggestions").innerHTML = [
   ...new Set(seeds.map((x) => x.name)),
 ]
@@ -670,6 +828,40 @@ document.querySelector("#download-qr").addEventListener("click", () => {
   if (link.href) link.click();
 });
 setLanguage(lang);
+
+const adminSignatureVial = document.querySelector("#admin-signature-vial"),
+  adminVialFlip = document.querySelector("#admin-vial-flip"),
+  adminSignatureQr = document.querySelector("#admin-signature-qr");
+if (window.QRCode && adminSignatureQr)
+  new QRCode(adminSignatureQr, {
+    text: `${location.origin}${location.pathname.replace(/admin\.html$/, "")}?serial=35172`,
+    width: 150,
+    height: 150,
+    colorDark: "#071b42",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H,
+  });
+adminVialFlip?.addEventListener("click", () => {
+  const flipped = adminSignatureVial.classList.toggle("is-flipped");
+  adminVialFlip.setAttribute("aria-pressed", String(flipped));
+});
+adminVialFlip?.addEventListener("pointerenter", (event) => {
+  if (event.pointerType !== "mouse") return;
+  adminSignatureVial.classList.add("is-flipped");
+  adminVialFlip.setAttribute("aria-pressed", "true");
+});
+adminVialFlip?.addEventListener("pointerleave", (event) => {
+  if (event.pointerType !== "mouse") return;
+  adminSignatureVial.classList.remove("is-flipped");
+  adminVialFlip.setAttribute("aria-pressed", "false");
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("button, a, select, [role='button']")) return;
+  document.body.classList.remove("ui-transitioning");
+  requestAnimationFrame(() => document.body.classList.add("ui-transitioning"));
+  window.setTimeout(() => document.body.classList.remove("ui-transitioning"), 520);
+});
 
 const adminReduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 if (!adminReduceMotion.matches && matchMedia("(pointer: fine)").matches) {

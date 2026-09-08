@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=26" />
+    <link rel="stylesheet" href="./styles.css?v=28" />
   </head>
   <body class="admin-page admin-locked">
     <section
@@ -80,7 +80,23 @@
         </div>
         <div class="admin-head-visual">
           <span class="demo-badge" id="admin-badge">Base local</span>
-          <figure aria-hidden="true"><img src="./save-concept-vial-signature-v1.png" alt="" /></figure>
+          <figure class="admin-vial-figure" id="admin-signature-vial">
+            <button
+              class="admin-vial-flip"
+              id="admin-vial-flip"
+              type="button"
+              aria-label="Virar a ampola para ver o QR Code e o serial"
+              aria-pressed="false"
+            >
+              <span class="vial-flip-inner">
+                <span class="vial-face vial-front"><img src="./save-concept-vial-signature-v1.png" alt="Frente da ampola Save Concept Tirzepatide 20 mg" /></span>
+                <span class="vial-face vial-back">
+                  <img src="./save-concept-vial-back-v1.png" alt="Verso da ampola Save Concept com QR Code e serial" />
+                  <span class="vial-auth-label admin-vial-auth-label"><span id="admin-signature-qr"></span><strong>35172</strong></span>
+                </span>
+              </span>
+            </button>
+          </figure>
         </div>
       </div>
       <div class="admin-grid">
@@ -341,6 +357,6 @@
     </dialog>
     <script src="./catalog-data.js?v=23"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="./admin.js?v=26"></script>
+    <script src="./admin.js?v=28"></script>
   </body>
 </html>

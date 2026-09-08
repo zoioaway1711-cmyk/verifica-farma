@@ -334,28 +334,33 @@ function findValid(serial) {
   records = loadRecords();
   return records.find((x) => x.serial === serial && x.status === "authentic");
 }
+function customerRecord(id = session) {
+  const registry = safeParse(localStorage.getItem("vf-customer-registry"), []);
+  return Array.isArray(registry)
+    ? registry.find((profile) => profile?.id === id)
+    : null;
+}
 function profileKey() {
-  return "vf-rewards-profile-v2";
+  return `vf-rewards-profile-v3-${session || "guest"}`;
 }
 function loadProfile() {
   let p = safeParse(localStorage.getItem(profileKey()), null);
   if (!p) {
-    p = { verified: [], claimed: {}, verifiedAt: {} };
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith("vf-rewards-") || key === profileKey())
-        continue;
-      const old = safeParse(localStorage.getItem(key), null);
-      if (!old || !Array.isArray(old.verified)) continue;
-      old.verified.forEach((serial) => {
-        if (!p.verified.includes(serial)) p.verified.push(serial);
-        p.verifiedAt[serial] =
-          old.verifiedAt?.[serial] ||
-          p.verifiedAt[serial] ||
-          new Date().toISOString();
-      });
-      Object.assign(p.claimed, old.claimed || {});
-    }
+    const legacy = safeParse(
+      localStorage.getItem("vf-rewards-profile-v2"),
+      null,
+    );
+    const migratedTo = localStorage.getItem("vf-rewards-profile-v2-migrated-to");
+    p =
+      legacy && session && !migratedTo
+        ? {
+            verified: [...(legacy.verified || [])],
+            claimed: { ...(legacy.claimed || {}) },
+            verifiedAt: { ...(legacy.verifiedAt || {}) },
+          }
+        : { verified: [], claimed: {}, verifiedAt: {} };
+    if (legacy && session && !migratedTo)
+      localStorage.setItem("vf-rewards-profile-v2-migrated-to", session);
   }
   p.verified = Array.isArray(p.verified) ? p.verified : [];
   p.claimed = p.claimed || {};
@@ -382,6 +387,16 @@ function showApp(serial) {
 }
 function loginWith(serial, source = "manual") {
   const item = findValid(serial);
+  const customer = customerRecord(serial);
+  if (customer?.blocked) {
+    document.querySelector("#login-error").textContent =
+      language === "en"
+        ? "This account is blocked. Contact support."
+        : language === "es"
+          ? "Este registro está bloqueado. Contacta al soporte."
+          : "Este cadastro está bloqueado. Contacte o suporte.";
+    return false;
+  }
   if (!item) {
     document.querySelector("#login-error").textContent = t[language].loginError;
     return false;
@@ -504,6 +519,17 @@ document.querySelector("#verify-form").addEventListener("submit", (e) => {
 });
 function verify(serial, source = "manual") {
   records = loadRecords();
+  if (customerRecord()?.blocked) {
+    result.className = "result show invalid";
+    result.innerHTML = `<strong>${
+      language === "en"
+        ? "Account blocked"
+        : language === "es"
+          ? "Registro bloqueado"
+          : "Cadastro bloqueado"
+    }</strong>`;
+    return;
+  }
   if (!validSerial(serial)) {
     result.className = "result show invalid";
     result.innerHTML = `<strong>${t[language].invalid}</strong>`;
@@ -606,6 +632,9 @@ async function recordRemoteVerification(item) {
 }
 function creditSerial(item) {
   const p = loadProfile();
+  const customer = customerRecord();
+  if (customer?.blocked || customer?.revokedSerials?.includes(item.serial))
+    return false;
   if (p.verified.includes(item.serial)) return false;
   p.verified.push(item.serial);
   p.verifiedAt[item.serial] = new Date().toISOString();
@@ -675,10 +704,13 @@ function syncCustomerProfile(p, levelIndex, points, claimed) {
   if (!session) return;
   const stored = safeParse(localStorage.getItem("vf-customer-registry"), []);
   const profiles = Array.isArray(stored) ? stored : [];
+  const index = profiles.findIndex((item) => item && item.id === session);
+  const existing = index >= 0 ? profiles[index] : {};
   const profile = {
+    ...existing,
     id: session,
     lastActive: new Date().toISOString(),
-    serials: [...p.verified],
+    serials: [...new Set([...p.verified, ...(existing.revokedSerials || [])])],
     verifiedAt: { ...p.verifiedAt },
     points,
     level: levelIndex + 1,
@@ -690,7 +722,6 @@ function syncCustomerProfile(p, levelIndex, points, claimed) {
       activatedAt: item.activatedAt,
     })),
   };
-  const index = profiles.findIndex((item) => item && item.id === session);
   if (index >= 0) profiles[index] = profile;
   else profiles.unshift(profile);
   localStorage.setItem("vf-customer-registry", JSON.stringify(profiles));
@@ -701,8 +732,13 @@ function rewardCode(level) {
 function renderRewards() {
   const p = loadProfile(),
     n = p.verified.length,
-    points = n * 100,
-    levelIndex = getLevelIndex(points),
+    customer = customerRecord(),
+    rankOverride = Number(customer?.rankOverride || 0),
+    basePoints = n * 100,
+    levelIndex = rankOverride
+      ? Math.max(0, Math.min(LEVELS.length - 1, rankOverride - 1))
+      : getLevelIndex(basePoints),
+    points = Math.max(basePoints, LEVELS[levelIndex].points),
     level = LEVELS[levelIndex],
     next = LEVELS[levelIndex + 1];
   document.querySelector("#points-total").textContent = points.toLocaleString(
@@ -954,7 +990,8 @@ if (window.QRCode && demoQr)
     correctLevel: QRCode.CorrectLevel.H,
   });
 const serialFromUrl = new URLSearchParams(location.search).get("serial");
-if (session && findValid(session)) showApp(session);
+if (session && findValid(session) && !customerRecord(session)?.blocked)
+  showApp(session);
 else {
   localStorage.removeItem("vf-user-session");
   session = "";
@@ -1040,11 +1077,34 @@ if (window.QRCode && signatureQr)
     correctLevel: QRCode.CorrectLevel.H,
   });
 if (signatureVial && vialFlipButton) {
-  vialFlipButton.addEventListener("click", () => {
-    const flipped = signatureVial.classList.toggle("is-flipped");
+  const setVialSide = (flipped) => {
+    signatureVial.classList.toggle("is-flipped", flipped);
     vialFlipButton.setAttribute("aria-pressed", String(flipped));
+  };
+  vialFlipButton.addEventListener("click", () => {
+    setVialSide(!signatureVial.classList.contains("is-flipped"));
+  });
+  vialFlipButton.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse") setVialSide(true);
+  });
+  vialFlipButton.addEventListener("pointerleave", (event) => {
+    if (event.pointerType === "mouse") setVialSide(false);
   });
 }
+
+document.addEventListener("click", (event) => {
+  const trigger = event.target.closest("a[href^='#'], .mobile-nav button, [data-tab]");
+  if (!trigger) return;
+  document.body.classList.remove("ui-transitioning");
+  requestAnimationFrame(() => document.body.classList.add("ui-transitioning"));
+  window.setTimeout(() => document.body.classList.remove("ui-transitioning"), 520);
+  const targetId = trigger.getAttribute("href")?.slice(1);
+  if (!targetId) return;
+  const target = document.getElementById(targetId);
+  target?.classList.remove("section-arrival");
+  requestAnimationFrame(() => target?.classList.add("section-arrival"));
+  window.setTimeout(() => target?.classList.remove("section-arrival"), 720);
+});
 
 if (matchMedia("(pointer: fine)").matches && !reduceMotion.matches) {
   const dot = document.createElement("span");
