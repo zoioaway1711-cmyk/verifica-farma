@@ -7,9 +7,9 @@ function safeParse(raw, fallback) {
   }
 }
 function loadRecords() {
-  if (localStorage.getItem("vf-catalog-version") !== "catalog-100-v1") {
+  if (localStorage.getItem("vf-catalog-version") !== "catalog-200-v2") {
     localStorage.setItem("sc-admin-serials", JSON.stringify(seeded));
-    localStorage.setItem("vf-catalog-version", "catalog-100-v1");
+    localStorage.setItem("vf-catalog-version", "catalog-200-v2");
     return [...seeded];
   }
   const saved = safeParse(localStorage.getItem("sc-admin-serials"), []),
@@ -238,6 +238,15 @@ Object.assign(t.pt, {
   levelShort: "Nível",
   benefitsShort: "benefícios",
   logout: "Sair",
+  supportButton: "Ajuda",
+  supportTitle: "Como podemos ajudar?",
+  supportStep1Title: "Encontre o selo",
+  supportStep1Copy: "O QR Code e o serial estão juntos na parte traseira da embalagem.",
+  supportStep2Title: "Consulte o serial",
+  supportStep2Copy: "Digite 5, 6 ou 8 números, ou utilize a câmara para ler o QR Code.",
+  supportStep3Title: "Confira o resultado",
+  supportStep3Copy: "Produto, dosagem, farmácia, lote e estado devem aparecer na confirmação.",
+  supportScan: "Abrir leitor de QR Code",
 });
 Object.assign(t.en, {
   recent: "VERIFIED PRODUCTS",
@@ -266,6 +275,15 @@ Object.assign(t.en, {
   levelShort: "Level",
   benefitsShort: "benefits",
   logout: "Sign out",
+  supportButton: "Help",
+  supportTitle: "How can we help?",
+  supportStep1Title: "Find the seal",
+  supportStep1Copy: "The QR Code and serial are together on the back of the package.",
+  supportStep2Title: "Check the serial",
+  supportStep2Copy: "Enter 5, 6 or 8 digits, or use the camera to scan the QR Code.",
+  supportStep3Title: "Review the result",
+  supportStep3Copy: "The product, dose, pharmacy, batch and status must appear in the confirmation.",
+  supportScan: "Open QR Code scanner",
 });
 Object.assign(t.es, {
   recent: "PRODUCTOS VERIFICADOS",
@@ -296,6 +314,15 @@ Object.assign(t.es, {
   levelShort: "Nivel",
   benefitsShort: "beneficios",
   logout: "Salir",
+  supportButton: "Ayuda",
+  supportTitle: "¿Cómo podemos ayudarte?",
+  supportStep1Title: "Encuentra el sello",
+  supportStep1Copy: "El QR y el serial están juntos en la parte trasera del envase.",
+  supportStep2Title: "Consulta el serial",
+  supportStep2Copy: "Ingresa 5, 6 u 8 números o usa la cámara para leer el QR.",
+  supportStep3Title: "Revisa el resultado",
+  supportStep3Copy: "Producto, dosis, farmacia, lote y estado deben aparecer en la confirmación.",
+  supportScan: "Abrir lector de QR",
 });
 function clean(v) {
   return v.replace(/\D/g, "").slice(0, 8);
@@ -353,19 +380,26 @@ function showApp(serial) {
   renderRewards();
   renderHistory();
 }
-function loginWith(serial) {
+function loginWith(serial, source = "manual") {
   const item = findValid(serial);
   if (!item) {
     document.querySelector("#login-error").textContent = t[language].loginError;
     return false;
   }
   showApp(serial);
-  creditSerial(item);
+  const credited = creditSerial(item);
+  recordRemoteVerification({
+    ...item,
+    status: "authentic",
+    credited,
+    action: "login",
+    source,
+  });
   return true;
 }
 document.querySelector("#login-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  loginWith(clean(loginInput.value));
+  loginWith(clean(loginInput.value), "manual");
 });
 loginInput.addEventListener("input", () => {
   loginInput.value = clean(loginInput.value);
@@ -466,9 +500,9 @@ input.addEventListener("input", () => {
 });
 document.querySelector("#verify-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  verify(clean(input.value));
+  verify(clean(input.value), "manual");
 });
-function verify(serial) {
+function verify(serial, source = "manual") {
   records = loadRecords();
   if (!validSerial(serial)) {
     result.className = "result show invalid";
@@ -481,21 +515,70 @@ function verify(serial) {
     result.className = "result show warning";
     result.innerHTML = `<strong>! ${t[language].missing}</strong>`;
     addHistory({ serial, name: "—", maker: "", lot: "—", status: "warning" });
-    recordRemoteVerification({ serial, status: "not_found" });
+    recordRemoteVerification({
+      serial,
+      status: "not_found",
+      action: "verification",
+      source,
+    });
     return;
   }
   if (item.status === "invalid") {
     result.className = "result show invalid";
     result.innerHTML = `<strong>× ${t[language].blocked}</strong>${item.name}<br>${item.maker} · ${t[language].batch} ${item.lot}`;
     addHistory(item);
-    recordRemoteVerification({ ...item, status: "invalid" });
+    recordRemoteVerification({
+      ...item,
+      status: "invalid",
+      action: "verification",
+      source,
+    });
     return;
   }
   const wasNew = creditSerial(item);
   result.className = "result show authentic";
   result.innerHTML = `<strong>✓ ${t[language].valid}</strong>${item.name}<br>${item.maker} · ${t[language].batch} ${item.lot} · ${t[language].expiry} ${item.expiry}<br><small>${wasNew ? t[language].added : t[language].duplicate}</small>`;
   addHistory(item);
-  recordRemoteVerification({ ...item, status: "authentic", credited: wasNew });
+  recordRemoteVerification({
+    ...item,
+    status: "authentic",
+    credited: wasNew,
+    action: "verification",
+    source,
+  });
+}
+function auditMetadata() {
+  const connection =
+    navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  return {
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    locale: navigator.language || "",
+    languages: Array.isArray(navigator.languages)
+      ? navigator.languages.slice(0, 5)
+      : [],
+    platform: navigator.userAgentData?.platform || navigator.platform || "",
+    mobile: navigator.userAgentData?.mobile ?? null,
+    screen: {
+      width: screen.width,
+      height: screen.height,
+      colorDepth: screen.colorDepth,
+      pixelRatio: window.devicePixelRatio || 1,
+    },
+    viewport: { width: innerWidth, height: innerHeight },
+    cookiesEnabled: navigator.cookieEnabled,
+    doNotTrack: navigator.doNotTrack || "",
+    online: navigator.onLine,
+    connection: connection
+      ? {
+          effectiveType: connection.effectiveType || "",
+          downlink: Number(connection.downlink) || null,
+          rtt: Number(connection.rtt) || null,
+          saveData: Boolean(connection.saveData),
+        }
+      : null,
+    referrer: document.referrer.slice(0, 500),
+    page: location.pathname,
+  };
 }
 async function recordRemoteVerification(item) {
   try {
@@ -511,6 +594,9 @@ async function recordRemoteVerification(item) {
         credited: Boolean(item.credited),
         profileId: session || "anonymous",
         language,
+        action: item.action || "verification",
+        source: item.source || "manual",
+        metadata: auditMetadata(),
       }),
       keepalive: true,
     });
@@ -593,6 +679,7 @@ function syncCustomerProfile(p, levelIndex, points, claimed) {
     id: session,
     lastActive: new Date().toISOString(),
     serials: [...p.verified],
+    verifiedAt: { ...p.verifiedAt },
     points,
     level: levelIndex + 1,
     levelName: LEVELS[levelIndex].name.pt,
@@ -721,9 +808,10 @@ document
 const dialog = document.querySelector("#scanner-dialog"),
   video = document.querySelector("#scanner-video"),
   scannerStatus = document.querySelector("#scanner-status");
-let stream, scanTimer;
+let stream, scanTimer, html5Scanner;
 function openScanner(mode) {
   scanMode = mode;
+  scannerStatus.textContent = "A câmara será solicitada ao iniciar.";
   dialog.showModal();
 }
 document
@@ -735,34 +823,67 @@ document
 document
   .querySelector("#login-scanner")
   .addEventListener("click", () => openScanner("login"));
-function stopCamera() {
+const supportDialog = document.querySelector("#support-dialog");
+document.querySelector("#open-support")?.addEventListener("click", () =>
+  supportDialog.showModal(),
+);
+document.querySelector("#close-support")?.addEventListener("click", () =>
+  supportDialog.close(),
+);
+document.querySelector("#support-open-scanner")?.addEventListener("click", () => {
+  supportDialog.close();
+  openScanner("verify");
+});
+supportDialog?.addEventListener("click", (event) => {
+  if (event.target === supportDialog) supportDialog.close();
+});
+async function stopCamera() {
   clearInterval(scanTimer);
+  if (html5Scanner) {
+    try {
+      if (html5Scanner.isScanning) await html5Scanner.stop();
+      html5Scanner.clear();
+    } catch {}
+    html5Scanner = null;
+  }
   if (stream) stream.getTracks().forEach((x) => x.stop());
   stream = null;
   video.srcObject = null;
 }
-document.querySelector("#close-scanner").addEventListener("click", () => {
-  stopCamera();
+document.querySelector("#close-scanner").addEventListener("click", async () => {
+  await stopCamera();
   dialog.close();
 });
 dialog.addEventListener("close", stopCamera);
-async function acceptCode(raw) {
+async function acceptCode(raw, source = "qr-camera") {
   const match = String(raw).match(/(?:\d{8}|\d{6}|\d{5})/);
   if (!match) return false;
-  stopCamera();
+  await stopCamera();
   dialog.close();
   if (scanMode === "login") {
     loginInput.value = match[0];
     loginCount.textContent = `${match[0].length} / 8`;
-    return loginWith(match[0]);
+    return loginWith(match[0], source);
   }
   input.value = match[0];
   count.textContent = `${match[0].length} / 8`;
-  verify(match[0]);
+  verify(match[0], source);
   return true;
 }
 document.querySelector("#start-camera").addEventListener("click", async () => {
   try {
+    if (window.Html5Qrcode) {
+      await stopCamera();
+      html5Scanner = new Html5Qrcode("qr-reader");
+      scannerStatus.textContent = "Aponte para o QR Code do selo.";
+      await html5Scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 }, aspectRatio: 1 },
+        (decodedText) => acceptCode(decodedText, "qr-camera"),
+        () => {},
+      );
+      return;
+    }
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment" },
     });
@@ -787,12 +908,21 @@ document.querySelector("#start-camera").addEventListener("click", async () => {
 });
 document.querySelector("#qr-file").addEventListener("change", async (e) => {
   const file = e.target.files[0];
-  if (!file || !("BarcodeDetector" in window)) return;
+  if (!file) return;
   try {
+    if (window.Html5Qrcode) {
+      await stopCamera();
+      html5Scanner = new Html5Qrcode("qr-reader");
+      const decodedText = await html5Scanner.scanFile(file, true);
+      await acceptCode(decodedText, "qr-image");
+      e.target.value = "";
+      return;
+    }
+    if (!("BarcodeDetector" in window)) throw new Error("unsupported");
     const codes = await new BarcodeDetector({ formats: ["qr_code"] }).detect(
       await createImageBitmap(file),
     );
-    if (codes[0]) await acceptCode(codes[0].rawValue);
+    if (codes[0]) await acceptCode(codes[0].rawValue, "qr-image");
   } catch {
     scannerStatus.textContent = "Não foi possível ler esta imagem.";
   }
@@ -833,11 +963,11 @@ if (serialFromUrl && validSerial(serialFromUrl)) {
   if (!session) {
     loginInput.value = serialFromUrl;
     loginCount.textContent = `${serialFromUrl.length} / 8`;
-    loginWith(serialFromUrl);
+    loginWith(serialFromUrl, "qr-link");
   } else {
     input.value = serialFromUrl;
     count.textContent = `${serialFromUrl.length} / 8`;
-    verify(serialFromUrl);
+    verify(serialFromUrl, "qr-link");
   }
 }
 let installPrompt;
@@ -863,4 +993,115 @@ if ("serviceWorker" in navigator)
   window.addEventListener("load", () =>
     navigator.serviceWorker.register("./sw.js").catch(() => {}),
   );
+
+// Assinatura visual: progresso, revelação, ampola 3D e resposta ao clique.
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const scrollSignature = document.querySelector("#scroll-signature i");
+const updateScrollSignature = () => {
+  const available = document.documentElement.scrollHeight - innerHeight;
+  const progress = available > 0 ? Math.min(100, (scrollY / available) * 100) : 0;
+  scrollSignature?.style.setProperty("--scroll-progress", `${progress}%`);
+};
+updateScrollSignature();
+addEventListener("scroll", updateScrollSignature, { passive: true });
+addEventListener("resize", updateScrollSignature, { passive: true });
+
+const revealTargets = document.querySelectorAll(
+  "main > section:not(.hero), .verify-card, .product-copy, .signature-vial",
+);
+if (!reduceMotion.matches && "IntersectionObserver" in window) {
+  revealTargets.forEach((element, index) => {
+    element.classList.add("reveal-ready");
+    element.style.setProperty("--reveal-delay", `${(index % 3) * 70}ms`);
+  });
+  const revealObserver = new IntersectionObserver(
+    (entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.12, rootMargin: "0px 0px -5%" },
+  );
+  revealTargets.forEach((element) => revealObserver.observe(element));
+}
+
+const signatureVial = document.querySelector("#signature-vial");
+const vialFlipButton = document.querySelector("#vial-flip");
+const signatureQr = document.querySelector("#signature-demo-qr");
+if (window.QRCode && signatureQr)
+  new QRCode(signatureQr, {
+    text: `${location.origin}${location.pathname}?serial=35172`,
+    width: 150,
+    height: 150,
+    colorDark: "#071b42",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H,
+  });
+if (signatureVial && vialFlipButton) {
+  vialFlipButton.addEventListener("click", () => {
+    const flipped = signatureVial.classList.toggle("is-flipped");
+    vialFlipButton.setAttribute("aria-pressed", String(flipped));
+  });
+}
+
+if (matchMedia("(pointer: fine)").matches && !reduceMotion.matches) {
+  const dot = document.createElement("span");
+  const ring = document.createElement("span");
+  dot.className = "brand-cursor-dot";
+  ring.className = "brand-cursor-ring";
+  document.body.append(dot, ring);
+  let pointerX = -50;
+  let pointerY = -50;
+  let ringX = -50;
+  let ringY = -50;
+  addEventListener("pointermove", (event) => {
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    dot.style.left = `${pointerX}px`;
+    dot.style.top = `${pointerY}px`;
+    document.body.classList.add("brand-cursor-active");
+  }, { passive: true });
+  const animateCursor = () => {
+    ringX += (pointerX - ringX) * 0.18;
+    ringY += (pointerY - ringY) * 0.18;
+    ring.style.left = `${ringX}px`;
+    ring.style.top = `${ringY}px`;
+    requestAnimationFrame(animateCursor);
+  };
+  animateCursor();
+  document.addEventListener("pointerover", (event) => {
+    document.body.classList.toggle(
+      "brand-cursor-hover",
+      Boolean(event.target.closest("a, button, input, select, [role='button']")),
+    );
+  });
+  document.addEventListener("pointerdown", (event) => {
+    const ripple = document.createElement("span");
+    ripple.className = "brand-ripple";
+    ripple.style.left = `${event.clientX}px`;
+    ripple.style.top = `${event.clientY}px`;
+    document.body.append(ripple);
+    ripple.addEventListener("animationend", () => ripple.remove(), { once: true });
+  });
+}
+
+function addDepthResponse(selector) {
+  if (reduceMotion.matches || !matchMedia("(pointer: fine)").matches) return;
+  document.querySelectorAll(selector).forEach((card) => {
+    card.addEventListener("pointermove", (event) => {
+      const rect = card.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - 0.5;
+      const y = (event.clientY - rect.top) / rect.height - 0.5;
+      card.style.setProperty("--depth-x", `${y * -2.2}deg`);
+      card.style.setProperty("--depth-y", `${x * 2.2}deg`);
+    });
+    card.addEventListener("pointerleave", () => {
+      card.style.setProperty("--depth-x", "0deg");
+      card.style.setProperty("--depth-y", "0deg");
+    });
+  });
+}
+addDepthResponse(".verify-card");
 setLanguage(language);

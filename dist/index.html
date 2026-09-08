@@ -24,9 +24,10 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=25" />
   </head>
   <body>
+    <div class="scroll-signature" id="scroll-signature" aria-hidden="true"><i></i></div>
     <section class="login-gate" id="login-gate" aria-labelledby="login-title">
       <div class="login-brand">
         <img src="./save-concept-mark-v2.png" alt="Save Concept" />
@@ -58,8 +59,8 @@
           </div>
           <p class="verification-privacy">
             Ao consultar um serial, o sistema regista o ID do produto, data,
-            hora e endereço IP para prevenção de fraude e auditoria de
-            autenticidade.
+            hora, endereço IP e dados técnicos do navegador para prevenção de
+            fraude e auditoria de autenticidade.
           </p>
           <form id="login-form" novalidate>
             <label for="login-serial" id="login-serial-label"
@@ -241,6 +242,38 @@
                 autenticidade e a validação do produto.
               </p>
             </div>
+            <figure class="signature-vial" id="signature-vial">
+              <button
+                class="vial-flip"
+                id="vial-flip"
+                type="button"
+                aria-label="Virar a ampola para ver o QR Code e o serial"
+                aria-pressed="false"
+              >
+                <span class="vial-flip-inner">
+                  <span class="vial-face vial-front">
+                    <img
+                      src="./save-concept-vial-signature-v1.png"
+                      alt="Frasco Save Concept Tirzepatide 20 mg"
+                      width="1024"
+                      height="1536"
+                    />
+                  </span>
+                  <span class="vial-face vial-back">
+                    <img
+                      src="./save-concept-vial-back-v1.png"
+                      alt="Parte traseira do frasco com QR Code e serial"
+                      width="1024"
+                      height="1536"
+                    />
+                    <span class="vial-auth-label">
+                      <span id="signature-demo-qr"></span>
+                      <strong>35172</strong>
+                    </span>
+                  </span>
+                </span>
+              </button>
+            </figure>
           </div>
 
           <div class="verify-card">
@@ -450,6 +483,13 @@
       >
       <a href="#bonus"><span aria-hidden="true">★</span><small>Bónus</small></a>
     </nav>
+    <button
+      class="support-fab"
+      id="open-support"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="support-dialog"
+    ><span aria-hidden="true">?</span><strong data-i18n="supportButton">Ajuda</strong></button>
     <dialog id="scanner-dialog" class="scanner-dialog">
       <div class="scanner-head">
         <div>
@@ -462,7 +502,8 @@
       </div>
       <p>Aponte a câmera para o QR Code do selo traseiro.</p>
       <div class="camera-frame">
-        <video id="scanner-video" playsinline muted></video>
+        <div id="qr-reader" aria-label="Pré-visualização da câmara"></div>
+        <video id="scanner-video" playsinline muted hidden></video>
         <div class="camera-target"><i></i><i></i><i></i><i></i></div>
       </div>
       <div id="scanner-status" class="scanner-status">
@@ -502,8 +543,21 @@
         <span>Baixar QR Code</span><b>↓</b>
       </button>
     </dialog>
-    <script src="./catalog-data.js"></script>
+    <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-title">
+      <div class="support-head">
+        <div><small>AJUDA SAVE CONCEPT</small><h2 id="support-title" data-i18n="supportTitle">Como podemos ajudar?</h2></div>
+        <button id="close-support" type="button" aria-label="Fechar ajuda">×</button>
+      </div>
+      <div class="support-grid">
+        <article><span>01</span><div><strong data-i18n="supportStep1Title">Encontre o selo</strong><p data-i18n="supportStep1Copy">O QR Code e o serial estão juntos na parte traseira da embalagem.</p></div></article>
+        <article><span>02</span><div><strong data-i18n="supportStep2Title">Consulte o serial</strong><p data-i18n="supportStep2Copy">Digite 5, 6 ou 8 números, ou utilize a câmara para ler o QR Code.</p></div></article>
+        <article><span>03</span><div><strong data-i18n="supportStep3Title">Confira o resultado</strong><p data-i18n="supportStep3Copy">Produto, dosagem, farmácia, lote e estado devem aparecer na confirmação.</p></div></article>
+      </div>
+      <button class="primary support-scan" id="support-open-scanner" type="button"><span data-i18n="supportScan">Abrir leitor de QR Code</span><b>▦</b></button>
+    </dialog>
+    <script src="./catalog-data.js?v=23"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="./app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+    <script src="./app.js?v=26"></script>
   </body>
 </html>

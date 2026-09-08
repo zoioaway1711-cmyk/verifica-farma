@@ -15,7 +15,7 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./styles.css?v=20" />
+    <link rel="stylesheet" href="./styles.css?v=26" />
   </head>
   <body class="admin-page admin-locked">
     <section
@@ -75,10 +75,13 @@
           <span id="admin-eyebrow">GESTÃO DE AUTENTICIDADE</span>
           <h1 id="admin-title">Painel administrativo</h1>
           <p id="admin-intro">
-            100 produtos com dosagens verificadas já estão validados.
+            200 produtos com dosagens verificadas já estão validados.
           </p>
         </div>
-        <span class="demo-badge" id="admin-badge">Base local</span>
+        <div class="admin-head-visual">
+          <span class="demo-badge" id="admin-badge">Base local</span>
+          <figure aria-hidden="true"><img src="./save-concept-vial-signature-v1.png" alt="" /></figure>
+        </div>
       </div>
       <div class="admin-grid">
         <form class="generator-card" id="serial-generator">
@@ -202,6 +205,14 @@
             <small id="customers-near-label">Perto do próximo prémio</small
             ><strong id="customers-near">0</strong>
           </article>
+          <article>
+            <small>Medicamentos diferentes</small
+            ><strong id="customers-products">0</strong>
+          </article>
+          <article>
+            <small>Atividade em 24 horas</small
+            ><strong id="customers-activity">0</strong>
+          </article>
         </div>
         <label for="customer-search" id="customer-search-label"
           >Pesquisar por ID, serial, nível ou benefício</label
@@ -211,6 +222,7 @@
           type="search"
           placeholder="Pesquisar clientes…"
         />
+        <div class="customer-card-grid" id="customer-card-grid"></div>
         <div class="customer-table-wrap">
           <table>
             <thead>
@@ -230,6 +242,18 @@
           </table>
         </div>
       </section>
+      <dialog class="customer-detail-dialog" id="customer-detail-dialog">
+        <div class="customer-detail-head">
+          <div>
+            <small>PERFIL PSEUDONIMIZADO</small>
+            <h2 id="customer-detail-title">Detalhes do cliente</h2>
+          </div>
+          <button id="close-customer-detail" type="button" aria-label="Fechar">
+            ×
+          </button>
+        </div>
+        <div id="customer-detail-content"></div>
+      </dialog>
       <section
         class="customer-dashboard"
         aria-labelledby="verification-log-title"
@@ -278,11 +302,12 @@
                 <th>Serial / produto</th>
                 <th>Resultado</th>
                 <th>Endereço IP</th>
+                <th>Origem / dispositivo</th>
               </tr>
             </thead>
             <tbody id="verification-log-body">
               <tr class="empty-row">
-                <td colspan="5">A carregar registos…</td>
+                <td colspan="6">A carregar registos…</td>
               </tr>
             </tbody>
           </table>
@@ -314,8 +339,8 @@
         <span>Descarregar QR Code</span><b>↓</b>
       </button>
     </dialog>
-    <script src="./catalog-data.js?v=20"></script>
+    <script src="./catalog-data.js?v=23"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="./admin.js?v=20"></script>
+    <script src="./admin.js?v=26"></script>
   </body>
 </html>

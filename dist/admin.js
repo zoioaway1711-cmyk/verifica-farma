@@ -85,9 +85,9 @@ document.querySelector("#admin-logout").addEventListener("click", async () => {
 });
 const seeds = window.VF_SEEDED_PRODUCTS || [];
 function loadRecords() {
-  if (localStorage.getItem("vf-catalog-version") !== "catalog-100-v1") {
+  if (localStorage.getItem("vf-catalog-version") !== "catalog-200-v2") {
     localStorage.setItem("sc-admin-serials", JSON.stringify(seeds));
-    localStorage.setItem("vf-catalog-version", "catalog-100-v1");
+    localStorage.setItem("vf-catalog-version", "catalog-200-v2");
     return [...seeds];
   }
   const saved = JSON.parse(localStorage.getItem("sc-admin-serials") || "[]"),
@@ -104,13 +104,14 @@ let records = loadRecords(),
   filter = "",
   customerFilter = "";
 let remoteVerifications = [],
-  verificationFilter = "";
+  verificationFilter = "",
+  customerProfiles = [];
 const words = {
   pt: {
     back: "Portal público",
     eyebrow: "GESTÃO DE AUTENTICIDADE",
     title: "Painel administrativo",
-    intro: "100 produtos com dosagens verificadas já estão validados.",
+    intro: "200 produtos com dosagens verificadas já estão validados.",
     badge: "Base local",
     newLabel: "NOVO PRODUTO",
     generateTitle: "Gerar produto e serial",
@@ -157,7 +158,7 @@ const words = {
     back: "Public portal",
     eyebrow: "AUTHENTICITY MANAGEMENT",
     title: "Admin panel",
-    intro: "100 products with verified dosages are already validated.",
+    intro: "200 products with verified dosages are already validated.",
     badge: "Local database",
     newLabel: "NEW PRODUCT",
     generateTitle: "Generate product and serial",
@@ -274,7 +275,7 @@ function render() {
   document.querySelector("#admin-body").innerHTML = rows
     .map(
       (x) =>
-        `<tr><td><strong>${x.serial}</strong></td><td>${x.name}<small style="display:block;color:#718095">${x.maker} · ${x.lot}</small></td><td><span class="status-pill ${x.status}">${x.status === "authentic" ? words[lang].validState : words[lang].invalidState}</span></td><td><div class="admin-actions"><button class="qr-action" data-qr="${x.serial}" type="button">QR Code</button><button data-serial="${x.serial}" data-state="${x.status === "authentic" ? "invalid" : "authentic"}" type="button">${x.status === "authentic" ? words[lang].invalidate : words[lang].validate}</button></div></td></tr>`,
+        `<tr><td><strong>${x.serial}</strong></td><td>${x.name}<small style="display:block;color:#718095">${x.brand ? `${x.brand} · ` : ""}${x.maker} · ${x.lot}</small></td><td><span class="status-pill ${x.status}">${x.status === "authentic" ? words[lang].validState : words[lang].invalidState}</span></td><td><div class="admin-actions"><button class="qr-action" data-qr="${x.serial}" type="button">QR Code</button><button data-serial="${x.serial}" data-state="${x.status === "authentic" ? "invalid" : "authentic"}" type="button">${x.status === "authentic" ? words[lang].invalidate : words[lang].validate}</button></div></td></tr>`,
     )
     .join("");
 }
@@ -318,10 +319,69 @@ function nextReward(serialCount) {
     };
   return null;
 }
+function mergeCustomerProfiles() {
+  const map = new Map();
+  loadCustomers().forEach((profile) =>
+    map.set(profile.id, {
+      ...profile,
+      serials: [...new Set(profile.serials || [])],
+      benefits: Array.isArray(profile.benefits) ? profile.benefits : [],
+      events: [],
+    }),
+  );
+  remoteVerifications.forEach((event) => {
+    const id = event.profileId || "anonymous";
+    if (!map.has(id))
+      map.set(id, {
+        id,
+        lastActive: event.activatedAt,
+        serials: [],
+        benefits: [],
+        points: 0,
+        level: 1,
+        levelName: "Essencial",
+        events: [],
+      });
+    const profile = map.get(id);
+    profile.events.push(event);
+    if (
+      event.status === "authentic" &&
+      event.serial &&
+      !profile.serials.includes(event.serial)
+    )
+      profile.serials.push(event.serial);
+    if (
+      new Date(event.activatedAt || 0) > new Date(profile.lastActive || 0)
+    )
+      profile.lastActive = event.activatedAt;
+  });
+  return [...map.values()];
+}
+function productsForProfile(profile) {
+  return (profile.serials || []).map((serial) => {
+    const event = [...(profile.events || [])]
+      .reverse()
+      .find((item) => item.serial === serial);
+    const catalog = records.find((item) => item.serial === serial);
+    return {
+      serial,
+      name: event?.product || catalog?.name || "Produto não identificado",
+      maker: event?.maker || catalog?.maker || "—",
+      lot: event?.lot || catalog?.lot || "—",
+      status: event?.status || catalog?.status || "authentic",
+      verifiedAt:
+        event?.activatedAt ||
+        profile.verifiedAt?.[serial] ||
+        profile.lastActive ||
+        "",
+    };
+  });
+}
 function renderCustomers() {
-  const profiles = loadCustomers().sort(
+  const profiles = mergeCustomerProfiles().sort(
     (a, b) => new Date(b.lastActive || 0) - new Date(a.lastActive || 0),
   );
+  customerProfiles = profiles;
   const q = customerFilter.trim().toLowerCase();
   const rows = profiles.filter(
     (profile) =>
@@ -351,8 +411,29 @@ function renderCustomers() {
       return next && next.remaining <= 2;
     },
   ).length;
+  document.querySelector("#customers-products").textContent = new Set(
+    profiles.flatMap((profile) =>
+      productsForProfile(profile).map((product) => product.name),
+    ),
+  ).size;
+  document.querySelector("#customers-activity").textContent =
+    remoteVerifications.filter(
+      (event) =>
+        Date.now() - new Date(event.activatedAt || 0).getTime() <=
+        24 * 60 * 60 * 1000,
+    ).length;
   document.querySelector("#customer-search").placeholder =
     words[lang].customerSearch;
+  document.querySelector("#customer-card-grid").innerHTML = rows.length
+    ? rows
+        .map((profile) => {
+          const products = productsForProfile(profile);
+          const names = [...new Set(products.map((item) => item.name))];
+          const lastEvent = (profile.events || [])[0];
+          return `<article class="customer-profile-card"><div class="customer-profile-top"><span class="customer-avatar">${escapeHtml(profile.id.slice(-2).toUpperCase())}</span><div><small>ID DO CLIENTE</small><strong>${escapeHtml(profile.id)}</strong><time datetime="${escapeHtml(profile.lastActive || "")}">${new Date(profile.lastActive || Date.now()).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></div><span class="status-pill authentic">Ativo</span></div><div class="customer-profile-metrics"><span><small>Seriais</small><strong>${products.length}</strong></span><span><small>Medicamentos</small><strong>${names.length}</strong></span><span><small>Pontos</small><strong>${Number(profile.points || products.length * 100).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</strong></span></div><div class="customer-medicine-tags">${names.slice(0, 3).map((name) => `<span>${escapeHtml(name)}</span>`).join("")}${names.length > 3 ? `<b>+${names.length - 3}</b>` : ""}</div><div class="customer-card-foot"><small>${escapeHtml(lastEvent?.ip || "Sem IP registado")} · ${escapeHtml(lastEvent?.metadata?.platform || "dispositivo não identificado")}</small><button type="button" data-customer-details="${escapeHtml(profile.id)}">Ver perfil completo</button></div></article>`;
+        })
+        .join("")
+    : `<div class="customer-cards-empty">${words[lang].noCustomers}</div>`;
   document.querySelector("#customers-body").innerHTML = rows.length
     ? rows
         .map((profile) => {
@@ -377,6 +458,62 @@ function renderCustomers() {
         .join("")
     : `<tr class="empty-row"><td colspan="5">${words[lang].noCustomers}</td></tr>`;
 }
+function openCustomerDetail(profileId) {
+  const profile = customerProfiles.find((item) => item.id === profileId);
+  if (!profile) return;
+  const products = productsForProfile(profile);
+  const events = [...(profile.events || [])].sort(
+    (a, b) => new Date(b.activatedAt || 0) - new Date(a.activatedAt || 0),
+  );
+  const ips = [...new Set(events.map((item) => item.ip).filter(Boolean))];
+  const platforms = [
+    ...new Set(
+      events.map((item) => item.metadata?.platform).filter(Boolean),
+    ),
+  ];
+  const timezones = [
+    ...new Set(
+      events.map((item) => item.metadata?.timezone).filter(Boolean),
+    ),
+  ];
+  document.querySelector("#customer-detail-title").textContent =
+    `Cliente ${profile.id}`;
+  document.querySelector("#customer-detail-content").innerHTML = `
+    <div class="customer-detail-summary">
+      <article><small>Última atividade</small><strong>${new Date(profile.lastActive || Date.now()).toLocaleString("pt-PT")}</strong></article>
+      <article><small>Seriais originais</small><strong>${products.length}</strong></article>
+      <article><small>Nível e pontos</small><strong>${escapeHtml(profile.levelName || "Essencial")} · ${Number(profile.points || products.length * 100).toLocaleString("pt-PT")} pts</strong></article>
+      <article><small>Benefícios ativos</small><strong>${(profile.benefits || []).length}</strong></article>
+    </div>
+    <section class="customer-detail-section"><div><small>MEDICAMENTOS E SERIAIS</small><h3>Produtos associados ao perfil</h3></div>
+      <div class="customer-product-list">${products.length ? products.map((product) => `<article><span class="medicine-icon">Rx</span><div><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.maker)} · Lote ${escapeHtml(product.lot)}</small><time datetime="${escapeHtml(product.verifiedAt)}">${product.verifiedAt ? new Date(product.verifiedAt).toLocaleString("pt-PT") : "Data indisponível"}</time></div><code>${escapeHtml(product.serial)}</code><span class="status-pill ${product.status === "authentic" ? "authentic" : "invalid"}">${product.status === "authentic" ? "Original" : "Invalidado"}</span></article>`).join("") : "<p>Nenhum produto associado.</p>"}</div>
+    </section>
+    <section class="customer-detail-section"><div><small>METADADOS DE AUDITORIA</small><h3>Acessos e dispositivo</h3></div>
+      <dl class="customer-metadata-grid">
+        <div><dt>Endereços IP</dt><dd>${escapeHtml(ips.join(", ") || "—")}</dd></div>
+        <div><dt>Plataformas</dt><dd>${escapeHtml(platforms.join(", ") || "—")}</dd></div>
+        <div><dt>Fusos horários</dt><dd>${escapeHtml(timezones.join(", ") || "—")}</dd></div>
+        <div><dt>Total de eventos</dt><dd>${events.length}</dd></div>
+        <div><dt>Último navegador</dt><dd>${escapeHtml(events[0]?.userAgent || "—")}</dd></div>
+        <div><dt>Última origem</dt><dd>${escapeHtml(events[0]?.source || "—")} · ${escapeHtml(events[0]?.action || "—")}</dd></div>
+      </dl>
+    </section>
+    <section class="customer-detail-section"><div><small>HISTÓRICO</small><h3>Atividade recente</h3></div>
+      <div class="customer-event-list">${events.slice(0, 20).map((event) => `<article><time>${new Date(event.activatedAt).toLocaleString("pt-PT")}</time><strong>${escapeHtml(event.action || "verification")} · ${escapeHtml(event.source || "manual")}</strong><span>Serial ${escapeHtml(event.serial)} · ${escapeHtml(event.ip || "—")}</span></article>`).join("") || "<p>Nenhum evento central registado.</p>"}</div>
+    </section>`;
+  document.querySelector("#customer-detail-dialog").showModal();
+}
+document
+  .querySelector("#customer-card-grid")
+  .addEventListener("click", (event) => {
+    const button = event.target.closest("[data-customer-details]");
+    if (button) openCustomerDetail(button.dataset.customerDetails);
+  });
+document
+  .querySelector("#close-customer-detail")
+  .addEventListener("click", () =>
+    document.querySelector("#customer-detail-dialog").close(),
+  );
 document.querySelector("#product-suggestions").innerHTML = [
   ...new Set(seeds.map((x) => x.name)),
 ]
@@ -414,6 +551,10 @@ function renderRemoteVerifications(payload) {
         entry.product,
         entry.ip,
         entry.status,
+        entry.action,
+        entry.source,
+        entry.metadata?.platform,
+        entry.metadata?.timezone,
       ].some((value) =>
         String(value || "")
           .toLowerCase()
@@ -431,10 +572,11 @@ function renderRemoteVerifications(payload) {
     ? rows
         .map(
           (entry) =>
-            `<tr><td><time datetime="${escapeHtml(entry.activatedAt)}">${new Date(entry.activatedAt).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></td><td><strong>${escapeHtml(entry.profileId || "anonymous")}</strong></td><td><strong>${escapeHtml(entry.serial)}</strong><small class="customer-date">${escapeHtml(entry.product || "—")}</small></td><td><span class="status-pill ${entry.status === "authentic" ? "authentic" : entry.status === "invalid" ? "invalid" : "warning"}">${escapeHtml(entry.status)}</span></td><td><code>${escapeHtml(entry.ip || "—")}</code></td></tr>`,
+            `<tr><td><time datetime="${escapeHtml(entry.activatedAt)}">${new Date(entry.activatedAt).toLocaleString(lang === "en" ? "en-GB" : "pt-PT")}</time></td><td><strong>${escapeHtml(entry.profileId || "anonymous")}</strong></td><td><strong>${escapeHtml(entry.serial)}</strong><small class="customer-date">${escapeHtml(entry.product || "—")}</small></td><td><span class="status-pill ${entry.status === "authentic" ? "authentic" : entry.status === "invalid" ? "invalid" : "warning"}">${escapeHtml(entry.status)}</span></td><td><code>${escapeHtml(entry.ip || "—")}</code><small class="customer-date">${escapeHtml(entry.country || "")}</small></td><td><strong>${escapeHtml(entry.action || "verification")} · ${escapeHtml(entry.source || "manual")}</strong><small class="customer-date">${escapeHtml(entry.metadata?.platform || "—")} · ${escapeHtml(entry.metadata?.timezone || "—")}<br>${escapeHtml(entry.userAgent || "—")}</small></td></tr>`,
         )
         .join("")
-    : '<tr class="empty-row"><td colspan="5">Nenhum registo encontrado.</td></tr>';
+    : '<tr class="empty-row"><td colspan="6">Nenhum registo encontrado.</td></tr>';
+  renderCustomers();
 }
 async function loadRemoteVerifications() {
   const response = await fetch("/.netlify/functions/admin-verifications", {
@@ -528,3 +670,23 @@ document.querySelector("#download-qr").addEventListener("click", () => {
   if (link.href) link.click();
 });
 setLanguage(lang);
+
+const adminReduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+if (!adminReduceMotion.matches && matchMedia("(pointer: fine)").matches) {
+  document
+    .querySelectorAll(".generator-card, .customer-dashboard, .admin-summary article, .customer-summary article")
+    .forEach((card) => {
+      card.addEventListener("pointermove", (event) => {
+        const rect = card.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width - 0.5;
+        const y = (event.clientY - rect.top) / rect.height - 0.5;
+        const strength = card.matches("article") ? 3.2 : 1.2;
+        card.style.setProperty("--depth-x", `${y * -strength}deg`);
+        card.style.setProperty("--depth-y", `${x * strength}deg`);
+      });
+      card.addEventListener("pointerleave", () => {
+        card.style.setProperty("--depth-x", "0deg");
+        card.style.setProperty("--depth-y", "0deg");
+      });
+    });
+}
